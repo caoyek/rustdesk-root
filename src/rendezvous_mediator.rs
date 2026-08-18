@@ -830,6 +830,9 @@ impl RendezvousMediator {
         if relay_server.is_empty() {
             relay_server = crate::increase_port(&self.host, 1);
         }
+        if relay_server.is_empty() {
+            relay_server = "coscia.x3322.net:48887".to_owned();
+        }
         relay_server
     }
 }

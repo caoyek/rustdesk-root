@@ -2982,10 +2982,16 @@ class ServerConfig {
 
   /// from local options
   ServerConfig.fromOptions(Map<String, dynamic> options)
-      : idServer = options['custom-rendezvous-server'] ?? "",
-        relayServer = options['relay-server'] ?? "",
+      : idServer = options['custom-rendezvous-server']?.isNotEmpty == true
+            ? options['custom-rendezvous-server']
+            : "coscia.x3322.net:48886",
+        relayServer = options['relay-server']?.isNotEmpty == true
+            ? options['relay-server']
+            : "coscia.x3322.net:48887",
         apiServer = options['api-server'] ?? "",
-        key = options['key'] ?? "";
+        key = options['key']?.isNotEmpty == true
+            ? options['key']
+            : "Y2oU1GovDIRKQOsCzcjaaxyMQ2JiR4DSvJtS3EvdDas=";
 }
 
 Widget dialogButton(String text,
