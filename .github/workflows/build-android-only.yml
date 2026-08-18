@@ -60,7 +60,7 @@ jobs:
   build-android-arm64:
     name: Build Android ARM64 Release APK
     needs: [generate-bridge]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@v1.3.1
