@@ -7,6 +7,12 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  FLUTTER_VERSION: "3.22.3"
+  RUST_VERSION: "1.75"
+  CARGO_EXPAND_VERSION: "1.0.95"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+
 jobs:
   build-android:
     name: Build Android ARM64 Release APK
@@ -26,16 +32,17 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.x'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
           cache: true
 
       - name: Set up Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi
+          targets: aarch64-linux-android
+          components: "rustfmt"
 
-      - name: Install Android NDK & Build Tools
+      - name: Install Android NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r25c
@@ -44,33 +51,35 @@ jobs:
       - name: Install Linux Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libvpx-dev libopus-dev llvm clang cmake pkg-config
+          sudo apt-get install -y protobuf-compiler libvpx-dev libopus-dev llvm clang cmake pkg-config nasm ninja-build libgtk-3-dev libclang-dev
 
-      - name: Apply Custom Root Enhancement Patches
+      - name: Install Cargo & Bridge Tools
         run: |
-          echo "Applying Root input and headless patches..."
-          TARGET_DIR="libs/flutter_hbb/android/app/src/main/kotlin/com/carriez/flutter_hbb"
-          mkdir -p $TARGET_DIR
-          cp -f android-root-patch/*.kt $TARGET_DIR/ || true
-          echo "Patches applied successfully."
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          cargo install cargo-ndk --locked
 
-      - name: Build Rust Android Native Libraries
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Generate Flutter Rust Bridge
         run: |
-          echo "Compiling Rust native core..."
-          cargo build --release --target aarch64-linux-android || true
+          cd flutter
+          sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml || true
+          flutter pub get
+          flutter_rust_bridge_codegen --rust-input ../src/flutter_ffi.rs --dart-output ./lib/generated_bridge.dart --dart-decl-output ./lib/generated_bridge.freezed.dart -c ./android/app/src/main/kotlin/com/carriez/flutter_hbb/Bridge.h || true
+
+      - name: Build Rust Android Native Core (librustdesk.so)
+        run: |
+          cd flutter
+          cargo ndk --platform 21 --target aarch64-linux-android build --release --features flutter,hwcodec
 
       - name: Build Flutter Android Release APK
-        working-directory: libs/flutter_hbb
         run: |
-          flutter pub get
+          cd flutter
           flutter build apk --release --target-platform android-arm64
 
       - name: Rename and Prepare APK Artifact
         run: |
           mkdir -p dist
-          cp libs/flutter_hbb/build/app/outputs/flutter-apk/app-release.apk dist/rustdesk-root-arm64-release.apk
+          cp flutter/build/app/outputs/flutter-apk/app-release.apk dist/rustdesk-root-arm64-release.apk
 
       - name: Upload APK to GitHub Artifacts
         uses: actions/upload-artifact@v4
