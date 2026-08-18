@@ -107,6 +107,14 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
+      - name: Install NASM
+        run: |
+          curl --fail --location --retry 3 \
+            --output /tmp/nasm.deb \
+            https://archive.ubuntu.com/ubuntu/pool/universe/n/nasm/nasm_2.16.01-1build1_amd64.deb
+          sudo dpkg --install /tmp/nasm.deb
+          nasm --version
+
       - name: Build ARM64 vcpkg Dependencies
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
