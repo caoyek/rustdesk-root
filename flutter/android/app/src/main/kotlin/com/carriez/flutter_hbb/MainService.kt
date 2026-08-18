@@ -74,14 +74,22 @@ class MainService : Service() {
             Log.d(logTag,"Turn on Screen")
             wakeLock.acquire(5000)
         } else {
-            when (kind) {
-                0 -> { // touch
-                    InputService.ctx?.onTouchInput(mask, x, y)
+            if (MainServiceRootIntegration.isRootMode()) {
+                if (kind == 0 || kind == 1) {
+                    if (mask == LEFT_DOWN || mask == 0) {
+                        MainServiceRootIntegration.handleTap(x, y)
+                    }
                 }
-                1 -> { // mouse
-                    InputService.ctx?.onMouseInput(mask, x, y)
-                }
-                else -> {
+            } else {
+                when (kind) {
+                    0 -> { // touch
+                        InputService.ctx?.onTouchInput(mask, x, y)
+                    }
+                    1 -> { // mouse
+                        InputService.ctx?.onMouseInput(mask, x, y)
+                    }
+                    else -> {
+                    }
                 }
             }
         }
@@ -232,6 +240,7 @@ class MainService : Service() {
         super.onCreate()
         Log.d(logTag,"MainService onCreate, sdk int:${Build.VERSION.SDK_INT} reuseVirtualDisplay:$reuseVirtualDisplay")
         FFI.init(this)
+        MainServiceRootIntegration.init(this)
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
             serviceLooper = looper
@@ -249,6 +258,7 @@ class MainService : Service() {
     }
 
     override fun onDestroy() {
+        MainServiceRootIntegration.destroy()
         checkMediaPermission()
         stopService(Intent(this, FloatingWindowService::class.java))
         super.onDestroy()
