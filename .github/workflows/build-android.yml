@@ -8,13 +8,15 @@ on:
   workflow_dispatch:
 
 env:
-  FLUTTER_VERSION: "3.22.3"
+  FLUTTER_VERSION: "3.24.5"
   RUST_VERSION: "1.75"
+  NDK_VERSION: "r25c"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   CARGO_EXPAND_VERSION: "1.0.95"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
 
 jobs:
-  build-android:
+  build-android-arm64:
     name: Build Android ARM64 Release APK
     runs-on: ubuntu-22.04
     steps:
@@ -44,14 +46,37 @@ jobs:
 
       - name: Install Android NDK
         uses: nttld/setup-ndk@v1
+        id: setup-ndk
         with:
-          ndk-version: r25c
+          ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
 
       - name: Install Linux Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libvpx-dev libopus-dev llvm clang cmake pkg-config nasm ninja-build libgtk-3-dev libclang-dev
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            git \
+            g++ \
+            libasound2-dev \
+            libclang-dev \
+            libgtk-3-dev \
+            libpam0g-dev \
+            libpulse-dev \
+            libva-dev \
+            libxcb-randr0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxdo-dev \
+            libxfixes-dev \
+            llvm-dev \
+            nasm \
+            ninja-build \
+            pkg-config \
+            protobuf-compiler \
+            wget
 
       - name: Install Cargo & Bridge Tools
         run: |
@@ -61,15 +86,34 @@ jobs:
 
       - name: Generate Flutter Rust Bridge
         run: |
-          cd flutter
-          sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml || true
+          pushd flutter
           flutter pub get
           flutter_rust_bridge_codegen --rust-input ../src/flutter_ffi.rs --dart-output ./lib/generated_bridge.dart --dart-decl-output ./lib/generated_bridge.freezed.dart -c ./android/app/src/main/kotlin/com/carriez/flutter_hbb/Bridge.h || true
+          popd
 
-      - name: Build Rust Android Native Core (librustdesk.so)
+      - name: Setup vcpkg and install ARM64 dependencies
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Build Android ARM64 vcpkg dependencies
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          VCPKG_ROOT: /opt/artifacts/vcpkg
         run: |
-          cd flutter
-          cargo ndk --platform 21 --target aarch64-linux-android build --release --features flutter,hwcodec
+          ./flutter/build_android_deps.sh arm64-v8a
+
+      - name: Build Rust Android Native Library (librustdesk.so)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          VCPKG_ROOT: /opt/artifacts/vcpkg
+        run: |
+          ./flutter/ndk_arm64.sh
+          mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
+          cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so || cp ./target/aarch64-linux-android/release/librustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
 
       - name: Build Flutter Android Release APK
         run: |
