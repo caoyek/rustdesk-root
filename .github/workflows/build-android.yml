@@ -108,11 +108,13 @@ jobs:
           cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked || true
           cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked || true
           cargo install cargo-ndk --locked || true
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Generate Flutter Rust Bridge
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           pushd flutter && flutter pub get && popd
-          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
           cp -f ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h || true
 
       - name: Setup vcpkg and install ARM64 dependencies
@@ -135,6 +137,8 @@ jobs:
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
           VCPKG_ROOT: /opt/artifacts/vcpkg
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          chmod +x ./flutter/ndk_arm64.sh
           ./flutter/ndk_arm64.sh
           mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
           cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so || cp ./target/aarch64-linux-android/release/librustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
