@@ -63,12 +63,6 @@ jobs:
           targets: aarch64-linux-android
           components: "rustfmt"
 
-      - name: Setup Rust Cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: rustdesk-lib-cache-android
-          key: aarch64-linux-android
-
       - name: Install Android NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
@@ -105,10 +99,11 @@ jobs:
 
       - name: Install Cargo Tools & CodeGen
         run: |
-          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked || true
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked || true
-          cargo install cargo-ndk --locked || true
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --force || cargo install cargo-expand --force
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --force || cargo install flutter_rust_bridge_codegen --force
+          cargo install cargo-ndk --force
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          which cargo-ndk || ls -la $HOME/.cargo/bin
 
       - name: Generate Flutter Rust Bridge
         run: |
@@ -138,6 +133,7 @@ jobs:
           VCPKG_ROOT: /opt/artifacts/vcpkg
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          which cargo-ndk || cargo install cargo-ndk --force
           chmod +x ./flutter/ndk_arm64.sh
           ./flutter/ndk_arm64.sh
           mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
