@@ -13,12 +13,19 @@ object MainServiceRootIntegration {
     private var isRootModeActive = false
 
     fun init(context: Context) {
-        if (RootInputManager.isRootAvailable()) {
-            Log.i(TAG, "Root detected! Initializing Root Input Service...")
-            isRootModeActive = RootInputManager.start(context)
-        } else {
-            Log.i(TAG, "Device is not rooted or SU denied. Fallback to Accessibility.")
-            isRootModeActive = false
+        kotlin.concurrent.thread(start = true, name = "RootInitThread") {
+            try {
+                if (RootInputManager.isRootAvailable()) {
+                    Log.i(TAG, "Root detected! Initializing Root Input Service...")
+                    isRootModeActive = RootInputManager.start(context)
+                } else {
+                    Log.i(TAG, "Device is not rooted or SU denied. Fallback to Accessibility.")
+                    isRootModeActive = false
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Error initializing Root: ${e.message}", e)
+                isRootModeActive = false
+            }
         }
     }
 
