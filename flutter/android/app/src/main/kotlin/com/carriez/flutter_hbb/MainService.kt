@@ -75,11 +75,7 @@ class MainService : Service() {
             wakeLock.acquire(5000)
         } else {
             if (MainServiceRootIntegration.isRootMode()) {
-                if (kind == 0 || kind == 1) {
-                    if (mask == LEFT_DOWN || mask == 0) {
-                        MainServiceRootIntegration.handleTap(x, y)
-                    }
-                }
+                MainServiceRootIntegration.handlePointerInput(kind, mask, x, y)
             } else {
                 when (kind) {
                     0 -> { // touch
@@ -98,7 +94,9 @@ class MainService : Service() {
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustKeyEventInput(input: ByteArray) {
-        InputService.ctx?.onKeyEvent(input)
+        if (!MainServiceRootIntegration.isRootMode()) {
+            InputService.ctx?.onKeyEvent(input)
+        }
     }
 
     @Keep

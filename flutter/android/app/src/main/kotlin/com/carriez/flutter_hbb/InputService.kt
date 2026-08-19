@@ -66,7 +66,7 @@ class InputService : AccessibilityService() {
     companion object {
         var ctx: InputService? = null
         val isOpen: Boolean
-            get() = ctx != null
+            get() = ctx != null || MainServiceRootIntegration.isRootMode()
     }
 
     private fun notifyInputState() {

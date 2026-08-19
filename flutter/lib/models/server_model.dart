@@ -189,9 +189,9 @@ class ServerModel with ChangeNotifier {
       });
     }
 
-    // Initial keyboard status is off on mobile
+    // Initial keyboard status is on with Root support
     if (isMobile) {
-      bind.mainSetOption(key: kOptionEnableKeyboard, value: 'N');
+      bind.mainSetOption(key: kOptionEnableKeyboard, value: defaultOptionYes);
     }
   }
 
@@ -349,14 +349,15 @@ class ServerModel with ChangeNotifier {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
     if (_inputOk) {
+      _inputOk = false;
       parent.target?.invokeMethod("stop_input");
       bind.mainSetOption(key: kOptionEnableKeyboard, value: 'N');
+      notifyListeners();
     } else {
-      if (parent.target != null) {
-        /// the result of toggle-on depends on user actions in the settings page.
-        /// handle result, see [ServerModel.changeStatue]
-        showInputWarnAlert(parent.target!);
-      }
+      _inputOk = true;
+      parent.target?.invokeMethod("start_input");
+      bind.mainSetOption(key: kOptionEnableKeyboard, value: defaultOptionYes);
+      notifyListeners();
     }
   }
 
