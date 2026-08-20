@@ -66,7 +66,7 @@ class InputService : AccessibilityService() {
     companion object {
         var ctx: InputService? = null
         val isOpen: Boolean
-            get() = ctx != null || MainServiceRootIntegration.isRootMode()
+            get() = ctx != null
     }
 
     private fun notifyInputState() {
@@ -722,6 +722,68 @@ class InputService : AccessibilityService() {
 
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        try {
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+                val rootNode = rootInActiveWindow ?: event.source
+                rootNode?.let { handleAutoMediaProjection(it) }
+            }
+        } catch (e: Throwable) {
+            // ignore
+        }
+    }
+
+    private fun handleAutoMediaProjection(rootNode: AccessibilityNodeInfo) {
+        try {
+            val pkg = rootNode.packageName?.toString() ?: ""
+            if (pkg.contains("systemui") || pkg.contains("android") || pkg.contains("settings")) {
+                // 1. 尝试选中“整个屏幕 / Entire screen / 全部屏幕”
+                val entireScreenKeys = listOf("整个屏幕", "全部屏幕", "Entire screen", "Full screen", "Share entire screen")
+                for (kw in entireScreenKeys) {
+                    val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
+                    if (!nodes.isNullOrEmpty()) {
+                        for (node in nodes) {
+                            var target: AccessibilityNodeInfo? = node
+                            while (target != null && !target.isClickable) {
+                                target = target.parent
+                            }
+                            if (target != null && target.isClickable) {
+                                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                                Log.d(logTag, "Auto-selected entire screen: $kw")
+                                break
+                            } else {
+                                node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            }
+                        }
+                        break
+                    }
+                }
+
+                // 2. 尝试点击“立即开始 / 开始共享 / 允许 / Start now / Start”
+                val confirmKeys = listOf("立即开始", "开始共享", "允许", "Start now", "Start screen share", "Start capture", "Start")
+                for (kw in confirmKeys) {
+                    val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
+                    if (!nodes.isNullOrEmpty()) {
+                        for (node in nodes) {
+                            var target: AccessibilityNodeInfo? = node
+                            while (target != null && !target.isClickable) {
+                                target = target.parent
+                            }
+                            if (target != null && target.isClickable) {
+                                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                                Log.d(logTag, "Auto-clicked media projection confirm button: $kw")
+                                return
+                            } else {
+                                node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                                return
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            Log.w(logTag, "handleAutoMediaProjection error: ${e.message}")
+        }
     }
 
     override fun onServiceConnected() {

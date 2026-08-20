@@ -7,31 +7,26 @@ import android.util.Log
 
 /**
  * 主服务 Root 模式集成助手
- * 提供无缝切换：当设备已 Root 时自动走底层高性能注入，无需强求用户开启无障碍服务
+ * 利用 Root 权限实现：
+ * 1. 自动静默开启系统无障碍服务（com.carriez.flutter_hbb.InputService）
+ * 2. 自动配置电池优化白名单（Doze 忽略）与后台运行权限
+ * 3. 自动授予系统悬浮窗与通知等权限
  */
 object MainServiceRootIntegration {
     private const val TAG = "RustDesk_RootIntegrate"
+    private const val SERVICE_COMPONENT = "com.carriez.flutter_hbb/com.carriez.flutter_hbb.InputService"
     
     private var isRootModeActive = false
-
-    private var isPointerDown = false
-    private var pointerStartX = 0
-    private var pointerStartY = 0
-    private var lastPointerX = 0
-    private var lastPointerY = 0
-    private var pointerDownTime = 0L
 
     fun init(context: Context) {
         kotlin.concurrent.thread(start = true, name = "RootInitThread") {
             try {
                 if (RootInputManager.isRootAvailable()) {
-                    Log.i(TAG, "Root detected! Initializing Root Input Service...")
-                    isRootModeActive = RootInputManager.start(context)
-                    if (isRootModeActive) {
-                        notifyInputState()
-                    }
+                    Log.i(TAG, "Root detected! Initializing Root Permission & Service Enabler...")
+                    isRootModeActive = true
+                    applyRootOptimizations(context)
                 } else {
-                    Log.i(TAG, "Device is not rooted or SU denied. Fallback to Accessibility.")
+                    Log.i(TAG, "Device is not rooted or SU denied.")
                     isRootModeActive = false
                 }
             } catch (e: Throwable) {
@@ -41,125 +36,81 @@ object MainServiceRootIntegration {
         }
     }
 
+    fun isRootMode(): Boolean = isRootModeActive
+
+    /**
+     * 自动通过 Root 开启无障碍服务与各项后台系统权限
+     */
+    fun applyRootOptimizations(context: Context) {
+        kotlin.concurrent.thread(start = true, name = "RootOptThread") {
+            try {
+                // 1. 自动激活 InputService 无障碍服务
+                enableAccessibilityViaRootInternal()
+
+                // 2. 加入电池优化白名单 (忽略电池优化，支持后台长效运行)
+                RootInputManager.runRootCommand("dumpsys deviceidle whitelist +com.carriez.flutter_hbb")
+
+                // 3. 授予后台运行 AppOps 权限
+                RootInputManager.runRootCommand("cmd appops set com.carriez.flutter_hbb RUN_IN_BACKGROUND allow 2>/dev/null || appops set com.carriez.flutter_hbb RUN_IN_BACKGROUND allow")
+                RootInputManager.runRootCommand("cmd appops set com.carriez.flutter_hbb RUN_ANY_IN_BACKGROUND allow 2>/dev/null || appops set com.carriez.flutter_hbb RUN_ANY_IN_BACKGROUND allow")
+                RootInputManager.runRootCommand("cmd appops set com.carriez.flutter_hbb SYSTEM_ALERT_WINDOW allow 2>/dev/null || appops set com.carriez.flutter_hbb SYSTEM_ALERT_WINDOW allow")
+                RootInputManager.runRootCommand("cmd appops set com.carriez.flutter_hbb POST_NOTIFICATION allow 2>/dev/null || appops set com.carriez.flutter_hbb POST_NOTIFICATION allow")
+                RootInputManager.runRootCommand("cmd appops set com.carriez.flutter_hbb PROJECT_MEDIA allow 2>/dev/null || appops set com.carriez.flutter_hbb PROJECT_MEDIA allow")
+
+                // 4. 授予系统运行时权限
+                RootInputManager.runRootCommand("pm grant com.carriez.flutter_hbb android.permission.SYSTEM_ALERT_WINDOW 2>/dev/null")
+                RootInputManager.runRootCommand("pm grant com.carriez.flutter_hbb android.permission.POST_NOTIFICATIONS 2>/dev/null")
+                RootInputManager.runRootCommand("pm grant com.carriez.flutter_hbb android.permission.FOREGROUND_SERVICE 2>/dev/null")
+
+                Log.i(TAG, "Root optimizations and accessibility auto-grant applied successfully.")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed applying root optimizations: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 供 Flutter / MainActivity 调用：静默开启无障碍服务
+     */
+    fun enableAccessibilityViaRoot(context: Context) {
+        kotlin.concurrent.thread(start = true, name = "EnableA11yThread") {
+            try {
+                enableAccessibilityViaRootInternal()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to enable accessibility via root: ${e.message}")
+            }
+        }
+    }
+
+    private fun enableAccessibilityViaRootInternal() {
+        val cmd = """
+            cur=$(settings get secure enabled_accessibility_services)
+            svc="$SERVICE_COMPONENT"
+            if [ "$cur" = "null" ] || [ -z "$cur" ]; then
+                settings put secure enabled_accessibility_services "$svc"
+            else
+                case "$cur" in
+                    *"$svc"*) ;;
+                    *) settings put secure enabled_accessibility_services "$cur:$svc" ;;
+                esac
+            fi
+            settings put secure accessibility_enabled 1
+        """.trimIndent()
+        RootInputManager.runRootCommand(cmd)
+    }
+
+    fun destroy() {
+        if (isRootModeActive) {
+            isRootModeActive = false
+        }
+    }
+
     fun notifyInputState() {
         Handler(Looper.getMainLooper()).post {
             MainActivity.flutterMethodChannel?.invokeMethod(
                 "on_state_changed",
-                mapOf("name" to "input", "value" to "true")
+                mapOf("name" to "input", "value" to InputService.isOpen.toString())
             )
-        }
-    }
-
-    fun isRootMode(): Boolean = isRootModeActive
-
-    /**
-     * 分发统一触控与鼠标事件
-     */
-    fun handlePointerInput(kind: Int, mask: Int, x: Int, y: Int): Boolean {
-        if (!isRootModeActive) return false
-        
-        when (kind) {
-            1 -> { // 鼠标事件
-                when (mask) {
-                    1 -> { // LEFT_DOWN
-                        isPointerDown = true
-                        pointerStartX = x
-                        pointerStartY = y
-                        lastPointerX = x
-                        lastPointerY = y
-                        pointerDownTime = System.currentTimeMillis()
-                    }
-                    2 -> { // LEFT_MOVE
-                        if (isPointerDown) {
-                            lastPointerX = x
-                            lastPointerY = y
-                        }
-                    }
-                    0 -> { // LEFT_UP
-                        if (isPointerDown) {
-                            isPointerDown = false
-                            val duration = System.currentTimeMillis() - pointerDownTime
-                            val dx = kotlin.math.abs(lastPointerX - pointerStartX)
-                            val dy = kotlin.math.abs(lastPointerY - pointerStartY)
-                            if (dx < 15 && dy < 15) {
-                                if (duration > 600) {
-                                    RootInputManager.longPress(pointerStartX, pointerStartY, duration.toInt())
-                                } else {
-                                    RootInputManager.tap(pointerStartX, pointerStartY)
-                                }
-                            } else {
-                                val swipeDur = kotlin.math.max(100, kotlin.math.min(duration.toInt(), 500))
-                                RootInputManager.swipe(pointerStartX, pointerStartY, lastPointerX, lastPointerY, swipeDur)
-                            }
-                        }
-                    }
-                    3 -> { // RIGHT_UP (返回键)
-                        RootInputManager.pressBack()
-                    }
-                    523331 -> { // WHEEL_DOWN (向下滚屏)
-                        RootInputManager.swipe(x, y, x, kotlin.math.max(0, y - 350), 100)
-                    }
-                    963 -> { // WHEEL_UP (向上滚屏)
-                        RootInputManager.swipe(x, y, x, y + 350, 100)
-                    }
-                }
-                return true
-            }
-            0 -> { // 触屏手势
-                when (mask) {
-                    4 -> { // TOUCH_PAN_START
-                        isPointerDown = true
-                        pointerStartX = x
-                        pointerStartY = y
-                        lastPointerX = x
-                        lastPointerY = y
-                        pointerDownTime = System.currentTimeMillis()
-                    }
-                    5 -> { // TOUCH_PAN_UPDATE (RustDesk 传入相对位移)
-                        if (isPointerDown) {
-                            lastPointerX -= x
-                            lastPointerY -= y
-                        }
-                    }
-                    6 -> { // TOUCH_PAN_END
-                        if (isPointerDown) {
-                            isPointerDown = false
-                            val duration = System.currentTimeMillis() - pointerDownTime
-                            val dx = kotlin.math.abs(lastPointerX - pointerStartX)
-                            val dy = kotlin.math.abs(lastPointerY - pointerStartY)
-                            if (dx < 15 && dy < 15) {
-                                RootInputManager.tap(pointerStartX, pointerStartY)
-                            } else {
-                                val swipeDur = kotlin.math.max(100, kotlin.math.min(duration.toInt(), 500))
-                                RootInputManager.swipe(pointerStartX, pointerStartY, lastPointerX, lastPointerY, swipeDur)
-                            }
-                        }
-                    }
-                }
-                return true
-            }
-        }
-        return false
-    }
-
-    /**
-     * 处理按键事件
-     */
-    fun handleKeyEvent(keyCode: Int): Boolean {
-        if (isRootModeActive) {
-            RootInputManager.keyEvent(keyCode)
-            return true
-        }
-        return false
-    }
-
-    /**
-     * 销毁清理
-     */
-    fun destroy() {
-        if (isRootModeActive) {
-            RootInputManager.stop()
-            isRootModeActive = false
         }
     }
 }

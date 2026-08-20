@@ -61,7 +61,8 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
         )
-        initFlutterChannel(flutterMethodChannel!!)
+        initFlutterChannel(flutterMethodChannel!)
+        MainServiceRootIntegration.init(this)
         thread {
             try {
                 setCodecInfo()
@@ -205,6 +206,10 @@ class MainActivity : FlutterActivity() {
                         "on_state_changed",
                         mapOf("name" to "media", "value" to MainService.isReady.toString())
                     )
+                    result.success(true)
+                }
+                "start_input" -> {
+                    MainServiceRootIntegration.enableAccessibilityViaRoot(this)
                     result.success(true)
                 }
                 "stop_input" -> {

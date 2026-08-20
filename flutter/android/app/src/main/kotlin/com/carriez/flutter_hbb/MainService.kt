@@ -74,18 +74,14 @@ class MainService : Service() {
             Log.d(logTag,"Turn on Screen")
             wakeLock.acquire(5000)
         } else {
-            if (MainServiceRootIntegration.isRootMode()) {
-                MainServiceRootIntegration.handlePointerInput(kind, mask, x, y)
-            } else {
-                when (kind) {
-                    0 -> { // touch
-                        InputService.ctx?.onTouchInput(mask, x, y)
-                    }
-                    1 -> { // mouse
-                        InputService.ctx?.onMouseInput(mask, x, y)
-                    }
-                    else -> {
-                    }
+            when (kind) {
+                0 -> { // touch
+                    InputService.ctx?.onTouchInput(mask, x, y)
+                }
+                1 -> { // mouse
+                    InputService.ctx?.onMouseInput(mask, x, y)
+                }
+                else -> {
                 }
             }
         }
@@ -94,9 +90,7 @@ class MainService : Service() {
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustKeyEventInput(input: ByteArray) {
-        if (!MainServiceRootIntegration.isRootMode()) {
-            InputService.ctx?.onKeyEvent(input)
-        }
+        InputService.ctx?.onKeyEvent(input)
     }
 
     @Keep
