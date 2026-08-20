@@ -40,6 +40,20 @@ object RootInputManager {
     }
 
     /**
+     * 同步执行单条 Root 命令
+     */
+    fun runRootCommand(command: String): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            process.waitFor()
+            process.exitValue() == 0
+        } catch (e: Exception) {
+            Log.w(TAG, "runRootCommand error ($command): ${e.message}")
+            false
+        }
+    }
+
+    /**
      * 初始化持久化 Root 输入服务
      */
     @Synchronized

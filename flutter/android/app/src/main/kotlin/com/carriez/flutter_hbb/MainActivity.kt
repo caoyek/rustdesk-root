@@ -61,7 +61,7 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
         )
-        initFlutterChannel(flutterMethodChannel!)
+        initFlutterChannel(flutterMethodChannel!!)
         MainServiceRootIntegration.init(this)
         thread {
             try {

@@ -83,19 +83,12 @@ object MainServiceRootIntegration {
     }
 
     private fun enableAccessibilityViaRootInternal() {
-        val cmd = """
-            cur=$(settings get secure enabled_accessibility_services)
-            svc="$SERVICE_COMPONENT"
-            if [ "$cur" = "null" ] || [ -z "$cur" ]; then
-                settings put secure enabled_accessibility_services "$svc"
-            else
-                case "$cur" in
-                    *"$svc"*) ;;
-                    *) settings put secure enabled_accessibility_services "$cur:$svc" ;;
-                esac
-            fi
-            settings put secure accessibility_enabled 1
-        """.trimIndent()
+        val svc = SERVICE_COMPONENT
+        val cmd = "cur=\$(settings get secure enabled_accessibility_services); " +
+                "if [ \"\$cur\" = \"null\" ] || [ -z \"\$cur\" ]; then " +
+                "settings put secure enabled_accessibility_services \"$svc\"; " +
+                "else case \"\$cur\" in *\"$svc\"*) ;; *) settings put secure enabled_accessibility_services \"\$cur:$svc\" ;; esac; fi; " +
+                "settings put secure accessibility_enabled 1"
         RootInputManager.runRootCommand(cmd)
     }
 
